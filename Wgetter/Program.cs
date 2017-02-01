@@ -22,7 +22,7 @@ namespace WgetterNot
 			{
 				// Note: cannot 'await' on an async method from a console app's main method
 				// (as that cannot be flagged as async).
-				// Solution is to instead get the Task<>'s, and then wait on them.
+				// Solution is to instead get the Task<> and then wait on that.
 				var result = TotalUrlsAsync(args.ToList());
 				result.Wait();
 			});
@@ -61,6 +61,9 @@ namespace WgetterNot
 			return results.Sum();
 		}
 
+		// Note that while this method will fire off multiple Tasks, it itself
+		// is a blocking call.  i.e. This method itself cannot be called in an
+		// async manner.
 		private static int TotalUrlsWithTask(List<string> urls)
 		{
 			var tasks = new List<Task<int>>();
