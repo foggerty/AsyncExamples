@@ -5,107 +5,128 @@ using System.Diagnostics;
 using System.Net;
 using System.Threading.Tasks;
 
-namespace WgetterNot
+namespace Wgetter
 {
-	class MainClass
-	{
-		public static void Main(string[] args)
-		{
-			// Synchronously
-			Time("Synchronous", () => TotalUrlsSynch(args.ToList()));
+    class MainClass
+    {
+        public static async Task Main(string[] args)
+        {
+            // If only one url provided, duplicate it
+            var urls = args.ToList().GoesToEleven();
 
-			// Using Task
-			Time("Using old-skool tasks", () => TotalUrlsWithTask(args.ToList()));
+            // If this next line is commented out, then the Task based 
+            // example will take longer than the sync one.  This is because the thread
+            // pool needs to be built up/populated with worker threads.
+            // Test2 will run slowly, but once it HAS run, we've got a nicely
+            // filled thread pool, and so the Task based example runs faster than
+            // the sync one (yay!) but not as fast as the async/await one.
+            // This is because of the overhead in thread switching etc.
+            // Remember: for I/O bound tasks (like this!) use async/await, for
+            // CPU bound tasks, use Task.Run().
 
-			// Async/await
-			Time("Async/Await", () =>
-			{
-				// Note: cannot 'await' on an async method from a console app's main method
-				// (as that cannot be flagged as async).
-				// Solution is to instead get the Task<> and then wait on that.
-				var result = TotalUrlsAsync(args.ToList());
-				result.Wait();
-			});
-		}
+            //Time("Test2", () => Test2(urls));
 
-		private static void Time(string what, Action act)
-		{
-			var timer = new Stopwatch();
+            // Synchronously			
+            Time("Synchronous", () =>
+            {
+                var result = urls
+                    .Select(x => GetUrlSynch(x))
+                    .Sum();
 
-			timer.Start();
-			act();
+                return result;
+            });
 
-			Console.WriteLine("Total elapsed milliseconds for {0}: {1}", what, timer.ElapsedMilliseconds);
-		}
+            // Using Task
+            Time("Using old-skool tasks", () =>
+            {
+                var tasks = urls
+                    .Select(x => Task.Run(() => GetUrlSynch(x)))
+                    .ToArray();
 
-		private static int TotalUrlsSynch(List<string> urls)
-		{
-			int result = 0;
+                Task.WaitAll(tasks);
 
-			foreach (var url in urls)
-			{
-				result += GetUrlSynch(url);
-			}
+                return tasks.Sum(x => x.Result);
+            });
 
-			return result;
-		}
+            // Async/await
+            Time("Async/Await", () =>
+            {
+                // Not using LINQ, as want to show calling async methods and
+                // then waiting on the results.
+                var tasks = new List<Task<int>>();
 
-		private static async Task<int> TotalUrlsAsync(List<string> urls)
-		{
-			// Could also do in a foreach loop, but then have to manage collection of tasks.
-			// LINQ is possiibly the best C# feature ever, and another example of Greenspan's 
-			// tenth law in action......
-			var tasks = urls.Select(x => GetUrlAsync(x)).ToArray();
-			var results = await Task.WhenAll(tasks);
+                foreach (var url in urls)
+                {
+                    var task = GetUrlAsync(url);
+                    tasks.Add(task);
+                }
 
-			return results.Sum();
-		}
+                Task.WhenAll(tasks.ToArray());
 
-		// Note that while this method will fire off multiple Tasks, it itself
-		// is a blocking call.  i.e. This method itself cannot be called in an
-		// async manner.
-		private static int TotalUrlsWithTask(List<string> urls)
-		{
-			var tasks = new List<Task<int>>();
+                return tasks.Sum(x => x.Result);
+            });
+        }
 
-			foreach (var url in urls)
-			{
-				var t = Task.Run(() =>
-				{
-					var len = GetUrlSynch(url);
-					return len;
-				});
+        private static void Time(string what, Func<int> act)
+        {
+            var timer = new Stopwatch();
 
-				tasks.Add(t);
-			}
+            timer.Start();
 
-			Task.WaitAll(tasks.ToArray());
+            var result = act();
 
-			return tasks.Sum(x => x.Result);
-		}
+            Console.WriteLine("Total elapsed milliseconds for {0}: {1}.  Result: {2}",
+                what, timer.ElapsedMilliseconds, result);
+        }
 
-		private static int GetUrlSynch(string url)
-		{
-			using (var client = new WebClient())
-			{
-				var fred = client.DownloadString(url);
+        private static int GetUrlSynch(string url)
+        {
+            using (var client = new WebClient())
+            {
+                var fred = client.DownloadString(url);
 
-				return fred.Length;
-			}
-		}
+                return fred.Length;
+            }
+        }
 
-		private static async Task<int> GetUrlAsync(string url)
-		{
-			using (var client = new WebClient())
-			{
-				var fred = client.DownloadStringTaskAsync(url);
+        private static async Task<int> GetUrlAsync(string url)
+        {
+            using (var client = new WebClient())
+            {
+                var fred = client.DownloadStringTaskAsync(url);
 
-				await fred;
+                await fred;
 
-				return fred.Result == null ? 0 : fred.Result.Length;
-			}
-		}
-	}
+                return fred.Result == null ? 0 : fred.Result.Length;
+            }
+        }
+
+        private static int Test1(List<string> urls)
+        {
+            var result = 0;
+
+            foreach (var url in urls)
+            {
+                result += GetUrlSynch(url);
+            }
+
+            return result;
+        }
+
+        private static int Test2(List<string> urls)
+        {
+            var tasks = new List<Task<int>>();
+
+            foreach (var url in urls)
+            {
+                var task = Task.Run(() => GetUrlSynch(url));
+
+                tasks.Add(task);
+            }
+
+            Task.WaitAll(tasks.ToArray());
+
+            return tasks.Sum(x => x.Result);
+        }
+    }
 }
-
-
